@@ -1,0 +1,2 @@
+require(minfi)
+mset=readGEORawFile("GSE42865_signal_intensities.txt",Uname="Signal_A",Mname="Signal_B",sep="\t")
