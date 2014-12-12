@@ -1,2 +1,0 @@
-require(minfi)
-mset<-getGenomicRatioSetFromGEO('GSE42865')

@@ -1,0 +1,9 @@
+To read data from GEO, we need to use minfi package first
+require(minfi)
+
+
+If we want to use processed data, use the following command:
+mset<-getGenomicRatioSetFromGEO('GSE42865')
+
+If we want to use signal intensities data, use the follow command:
+mset=readGEORawFile("GSE42865_signal_intensities.txt",Uname="Signal_A",Mname="Signal_B",sep="\t")
