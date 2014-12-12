@@ -7,3 +7,11 @@ mset<-getGenomicRatioSetFromGEO('GSE42865')
 
 If we want to use signal intensities data, use the follow command:
 mset=readGEORawFile("GSE42865_signal_intensities.txt",Uname="Signal_A",Mname="Signal_B",sep="\t")
+
+
+
+Basically, they are the same. Both can be applied to the functions listed in this report.
+
+Difference: 1. the value is slightly different, even though the preprocessed method is the same. 2. data from signal intensities data do not contain good pData. 3. In their matrix, the order of samples and probes is different.
+
+After importing the data, we need to have a look at its pData. If it is not sufficient, we need to complete it (especially for data from signal intensities data).
