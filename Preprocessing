@@ -1,0 +1,3 @@
+We can use preprocessMethod() can tell us what method is applied for both data (it is useful for GRChannelSet, too)
+There is no preprocess method suitable for preprocessed data.
+Only preprocessQuantile() can be applied to signal intensities data.
