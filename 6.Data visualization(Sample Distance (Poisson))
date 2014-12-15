@@ -1,0 +1,13 @@
+#This is not successful. The codes should be something like below, but the graph is wrong. I think the reason is that the input data is not in suitable format. Also, there is something wrong with the colname and rowname.
+library("PoiClaClu")
+poisd <- PoissonDistance(t(getBeta(mset)))
+
+library(gplots)
+library('RColorBrewer')
+samplePoisDistMatrix <- as.matrix( poisd$dd )
+rownames(samplePoisDistMatrix) <-c(...)
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+hc <- hclust(poisd$dd)
+heatmap.2( samplePoisDistMatrix, Rowv=as.dendrogram(hc),
+          symm=TRUE, trace="none", col=colors,
+          margins=c(2,10), labCol=FALSE )
