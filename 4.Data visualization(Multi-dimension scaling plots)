@@ -1,0 +1,1 @@
+mdsPlot(getBeta(mset)[,1:4],numPositions=1000,sampGroups=c('A','A','B','B'),sampNames=c('A_1','A_2','B_1','B_2'))
