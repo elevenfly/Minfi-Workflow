@@ -1,0 +1,9 @@
+library(affy)
+rowMeans(log2(getBeta(mset[1:2000,1:2])))->A
+M<-log2(getBeta(mset[1:2000,1])/getBeta(mset[1:2000,2]))
+intersect(which(M!='NaN'),which(A!='NaN'))->filter
+intersect(filter,which(M!='Inf'))->filter
+intersect(filter,which(M!='-Inf'))->filter
+intersect(filter,which(A!='-Inf'))->filter
+intersect(filter,which(A!='Inf'))->filter
+ma.plot(A[filter],M[filter],cex=1)
