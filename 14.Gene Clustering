@@ -1,0 +1,9 @@
+library(RColorBrewer)
+library("genefilter")
+library(gplots)
+sidecols<-c('grey','grey','dodgerblue','dodgerblue')
+topVarGenes <-head(rownames(dmp),30)
+colors<-colorRampPalette(rev(brewer.pal(9,'PuOr')))(255)
+mat<-getBeta(mset)[topVarGenes,1:4]
+mat<-mat-rowMeans(mat)
+heatmap.2(mat,trace='none',col=colors,ColSideColors=sidecols,labRow=FALSE,mar=c(10,2),scale='row')
