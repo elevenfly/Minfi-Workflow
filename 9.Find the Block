@@ -1,1 +1,6 @@
-#This step has not run successfully yet. Still need some time to figure it out.
+#Only data from signal intensities data can be applied
+shortcpg<-cpgCollapse(mset[,1:4],what='Beta',returnBlockInfo=FALSE)
+design=matrix(c(1,0,1,0,0,1,0,1),nrow=4,ncol=2,byrow=TRUE)
+rownames(design)=c(1,2,3,4)
+colnames(design)=c('A','B')
+block=blockFinder(shortcpg,design=design,what='Beta',cutoff=0.0001,smooth=FALSE)
