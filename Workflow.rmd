@@ -1,0 +1,142 @@
+Minfi Workflow
+==============================
+#Getting Start
+```
+library(minfi)
+```
+#Read Processed Data
+```{r}
+mset<-getGenomicRatioSetFromGEO('GSE42865')
+class(mset)
+```
+
+#Read signal intensities data
+```{r}
+gmset=readGEORawFile("GSE42865_signal_intensities.txt",Uname="Signal_A",Mname="Signal_B",sep="\t")
+class(gmset)
+```
+
+#What is the difference?
+Basically, they are the same. Both can be applied to most of the functions listed in this reporte preprocessMethod() can tell us what method is applied for both data (it is useful for GRChannelSet, too)
+
+
+Difference: 1. the value is slightly different, even though the preprocessed method is the same. 2. data from signal intensities data do not contain good pData. 3. In their matrix, the order of samples and probes is different.
+
+#Preprocessing
+We can check what kind of preprocess method is applied for the data.
+```{r}
+preprocessMethod(mset)
+preprocessMethod(gmset)
+```
+There is no preprocess method suitable for preprocessed data, and it do not need preprocessed, too.
+Only preprocessQuantile() can be applied to signal intensities data.
+```{r}
+qgmset=preprocessQuantile(gmset)
+```
+
+#Data visualization(Multi-dimension scaling plots)
+```{r}
+mdsPlot(getBeta(mset)[,1:4],numPositions=1000,sampGroups=c('A','A','B','B'),sampNames=c('A_1','A_2','B_1','B_2'))
+```
+
+#Data visualization(Sample Distance (Euclidean))
+```{r}
+sampleDists<-dist(t(getBeta(mset)))  
+library(gplots)
+library('RColorBrewer')
+sampleDistMatrix<-as.matrix(sampleDists)
+colors<-colorRampPalette(rev(brewer.pal(9,'Blues')))(255)
+hc<-hclust(sampleDists)
+heatmap.2(sampleDistMatrix,Rowv=as.dendrogram(hc),symm=TRUE,trace='none',col=colors,margins=c(2,10),labCol=FALSE)
+```
+
+#Data visualization(Sample Distance (Poisson))
+This is not successful. The codes should be something like below, but the graph is wrong. I think the reason is that the input data is not in suitable format. Also, there is something wrong with the colname and rowname.
+```
+library("PoiClaClu")
+poisd <- PoissonDistance(t(getBeta(mset)))
+
+library(gplots)
+library('RColorBrewer')
+samplePoisDistMatrix <- as.matrix( poisd$dd )
+rownames(samplePoisDistMatrix) <-c(...)
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+hc <- hclust(poisd$dd)
+heatmap.2( samplePoisDistMatrix, Rowv=as.dendrogram(hc),
+          symm=TRUE, trace="none", col=colors,
+		            margins=c(2,10), labCol=FALSE )
+```
+
+#Data visualization (PCA plot)
+```{r}
+library(DESeq2)
+plotPCA(mset,intgroup=c('title'))
+```
+
+#Differentially Methylated Position
+```{r}
+dmp<-dmpFinder(getM(mset[1:500,1:4]),pheno=c('A','A','B','B'),type='continuous')
+```
+
+#Find the Block
+Only data from signal intensities data can be applied
+```{r}
+shortcpg<-cpgCollapse(gmset[,1:4],what='Beta',returnBlockInfo=FALSE)
+design=matrix(c(1,0,1,0,0,1,0,1),nrow=4,ncol=2,byrow=TRUE)
+rownames(design)=c(1,2,3,4)
+colnames(design)=c('A','B')
+block=blockFinder(shortcpg,design=design,what='Beta',cutoff=0.0001,smooth=FALSE)
+```
+
+#Diagnostic Plots(Plot the genes)
+```{r}
+cpgs <- rownames(dmp)[1]
+plotCpg(getM(mset[,1:4]), cpg=cpgs, pheno=c('A','A','B','B'),measure='M')
+```
+
+#Diagnostic Plots(MAplot)
+```{r}
+library(affy)
+rowMeans(log2(getBeta(mset[1:500,1:2])))->A
+M<-log2(getBeta(mset[1:500,1])/getBeta(mset[1:500,2]))
+intersect(which(M!='NaN'),which(A!='NaN'))->filter
+intersect(filter,which(M!='Inf'))->filter
+intersect(filter,which(M!='-Inf'))->filter
+intersect(filter,which(A!='-Inf'))->filter
+intersect(filter,which(A!='Inf'))->filter
+ma.plot(A[filter],M[filter],cex=1)
+```
+
+#Diagnostic Plots(Dispersion plot)
+Seems unable to do that yet. The existed function can not work on the data class in minfi. I need to write a new function, and it takes time.
+
+#Diagnostic Plots(histogram)
+```{r}
+hist(dmp$qval,breaks=20,col="grey50", border="white")
+```
+
+#Gene Clustering
+```{r}
+library(RColorBrewer)
+library("genefilter")
+library(gplots)
+sidecols<-c('grey','grey','dodgerblue','dodgerblue')
+topVarGenes <-head(rownames(dmp),30)
+colors<-colorRampPalette(rev(brewer.pal(9,'PuOr')))(255)
+mat<-getBeta(mset)[topVarGenes,1:4]
+mat<-mat-rowMeans(mat)
+heatmap.2(mat,trace='none',col=colors,ColSideColors=sidecols,labRow=FALSE,mar=c(10,2),scale='row')
+```
+
+
+#Plotting in genomic space
+```{r}
+library(Gviz)
+cpgIslands<-getLocations(mset[1:5,]) # To get the range information
+chr <- as.character(unique(seqnames(cpgIslands)))
+gen <- genome(cpgIslands)
+atrack <- AnnotationTrack(cpgIslands, name = "CpG")            
+gtrack <- GenomeAxisTrack()
+itrack <- IdeogramTrack(genome = gen, chromosome = chr)                     
+plotTracks(list(itrack, gtrack, atrack))
+```
