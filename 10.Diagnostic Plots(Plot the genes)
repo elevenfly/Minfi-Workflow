@@ -1,0 +1,3 @@
+> cpgs <- rownames(dmp)[1:4]
+> par(mfrow=c(2,2))
+> plotCpg(getM(mset), cpg=cpgs, pheno=c(‘A’,’A’,’B’,’B’),measure=’M’)
