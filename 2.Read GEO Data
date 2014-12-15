@@ -10,7 +10,7 @@ mset=readGEORawFile("GSE42865_signal_intensities.txt",Uname="Signal_A",Mname="Si
 
 
 
-#Basically, they are the same. Both can be applied to the functions listed in this report.
+#Basically, they are the same. Both can be applied to most of the functions listed in this report, except for blockFinder().
 
 #Difference: 1. the value is slightly different, even though the preprocessed method is the same. 2. data from signal intensities data do not contain good pData. 3. In their matrix, the order of samples and probes is different.
 
