@@ -1,0 +1,170 @@
+Minfi pWorkflow
+==============================
+#Getting Start
+```{r}
+library(minfi)
+```
+#Read Processed Data
+```{r}
+mset<-getGenomicRatioSetFromGEO('GSE42865')
+class(mset)
+```
+
+#Read signal intensities data
+```{r}
+library(GEOquery)
+path <- getGEOSuppFiles('GSE42865')
+print(path)
+```
+
+```{r}
+filepath <- row.names(path)[2]
+unzipped_filepath <- gsub("[.]gz$", "", filepath)
+gunzip(filepath,destname=unzipped_filepath)
+gmset=readGEORawFile(unzipped_filepath,Uname="Signal_A",Mname="Signal_B",sep="\t")
+class(gmset)
+```
+Merge `pData` into raw intensity data
+```{r}
+pd <- pData(mset)
+m <- match(rownames(pData(gmset)), rownames(pd))
+pData(gmset) <- pd[m,]
+```
+#What is the difference?
+Basically, they are the same. Both can be applied to most of the functions listed in this reporte preprocessMethod() can tell us what method is applied for both data (it is useful for GRChannelSet, too)
+
+
+Difference: 
+  1. the value is slightly different, even though the preprocessed method is the same.  
+  2. data from signal intensities data do not contain good pData.  
+  3. In their matrix, the order of samples and probes is different.  
+
+#Preprocessing
+We can check what kind of preprocess method is applied for the data.
+```{r}
+preprocessMethod(mset)
+preprocessMethod(gmset)
+```
+There is no preprocess method suitable for preprocessed data, and it do not need preprocessed, too.
+Only preprocessQuantile() can be applied to signal intensities data.
+```{r}
+qgmset=preprocessQuantile(gmset)
+class(qgmset)
+```
+
+#Phenotype data
+The specific discription of the data is listed.
+![alt text](discription.png)	
+This dataset contains multipule comparsion. Basically, it contains LMNA mutant samples(AG19911), WRN mutant samples(AG07896,AG11385), non-mutant disease samples(AG15694, AG15695, AG15693, AG03364), Immortalized B-cells(LCL5, LCL6, LCL7), B-cells(Bcell01,Bcell02,Bcell03) and peripheral blood mono- nuclear cells(PMBC11, PMBC12, PMBC14).
+
+
+Here we will choose to detect the differences between WRN mutant disease samples and Immortalized B-cells, which show the impact of mutant of WRN.
+```{r}
+mutant<-c('AG07896','AG11385')
+IB<-c('LCL5','LCL6','LCL7')
+```
+```{r}
+pd <- pData(qgmset)
+table(pd$gender)
+table(pd$health, pd$cell)
+```
+
+#Data visualization(Multi-dimension scaling plots)
+```{r}
+mdsPlot(getM(qgmset),numPositions=1000,sampGroups=pd$health,sampNames=pd$health)
+```
+
+#Data visualization(Sample Distance (Euclidean))
+```{r}
+sampleDists<-dist(t(getBeta(qgmset)))  
+library(gplots)
+library('RColorBrewer')
+sampleDistMatrix<-as.matrix(sampleDists)
+colors<-colorRampPalette(rev(brewer.pal(9,'Blues')))(255)
+hc<-hclust(sampleDists)
+heatmap.2(sampleDistMatrix,Rowv=as.dendrogram(hc),symm=TRUE,trace='none',col=colors,margins=c(2,10),labCol=FALSE)
+```
+
+#Differentially Methylated Position
+```{r}
+dmp<-dmpFinder(getM(qgmset[,c(mutant,IB)]),pheno=c('Mutant','Mutant','IB','IB','IB'),type='categorical')
+```
+#Find the Block
+Only data from signal intensities data can be applied
+```{r}
+shortcpg<-cpgCollapse(qgmset[,c(mutant,IB)],what='Beta',returnBlockInfo=FALSE)
+design=matrix(c(1,0,1,0,0,1,0,1,0,1),nrow=5,ncol=2,byrow=TRUE)
+rownames(design)=c(mutant,IB)
+colnames(design)=c('Mutant','IB')
+block=blockFinder(shortcpg,design=design,what='Beta',cutoff=0.0001,smooth=FALSE)
+```
+
+#Diagnostic Plots(Plot the genes)
+```{r}pheno=c('Mutant','Mutant','IB','IB','IB'),t
+cpgs <- rownames(dmp)[1]
+plotCpg(getM(qgmset[,c(mutant,IB)]), cpg=cpgs, pheno=c('Mutant','Mutant','IB','IB','IB'),measure='M')
+```
+
+#Diagnostic Plots(MAplot)
+```{r}
+library(affy)
+rowMeans(log2(getBeta(qgmset[1:500,1:2])))->A
+M<-log2(getBeta(qgmset[1:500,1])/getBeta(qgmset[1:500,2]))
+intersect(which(M!='NaN'),which(A!='NaN'))->filter
+intersect(filter,which(M!='Inf'))->filter
+intersect(filter,which(M!='-Inf'))->filter
+intersect(filter,which(A!='-Inf'))->filter
+intersect(filter,which(A!='Inf'))->filter
+ma.plot(A[filter],M[filter],cex=1)
+```
+
+#Diagnostic Plots(histogram)
+```{r}
+hist(dmp$qval,breaks=20,col="grey50", border="white")
+```
+
+#Gene Clustering
+```{r}
+library(RColorBrewer)
+library("genefilter")
+library(gplots)
+sidecols<-c('grey','grey','dodgerblue','dodgerblue','dodgerblue')
+topVarGenes <-head(rownames(dmp),30)
+colors<-colorRampPalette(rev(brewer.pal(9,'PuOr')))(255)
+mat<-getBeta(qgmset)[topVarGenes,c(mutant,IB)]
+mat<-mat-rowMeans(mat)
+heatmap.2(mat,trace='none',col=colors,ColSideColors=sidecols,labRow=FALSE,mar=c(10,2),scale='row')
+```
+
+
+#Plotting in genomic space
+```{r}
+library(Gviz)
+cpgIslands<-getLocations(qgmset[1:5,]) # To get the range information
+chr <- as.character(unique(seqnames(cpgIslands)))
+gen <- genome(cpgIslands)
+atrack <- AnnotationTrack(cpgIslands, name = "CpG")            
+gtrack <- GenomeAxisTrack()
+itrack <- IdeogramTrack(genome = gen, chromosome = chr)                     
+plotTracks(list(itrack, gtrack, atrack))
+```
+
+#Epiviz
+Aim for [this](http://epiviz.cbcb.umd.edu/?ws=WZCPGTd7Duv&seqName=chr11&start=130099272&end=133637378&settings=default&)
+```{r}
+library(epivizr)
+mgr=startEpiviz(workspace="qyOTB6vVnff")
+grblock<-GRanges(seqnames=block$table$chr,ranges=IRanges(block$table$start,block$table$end),strand=c('*'))
+blocks_dev <- mgr$addDevice(grblock, "450k WRN_mutant_blocks")
+getLocations(qgmset)->location
+location$mutantmean<-rowMeans(getBeta(qgmset[,mutant]))
+location$IBmean<-rowMeans(getBeta(qgmset[,IB]))
+means_dev <- mgr$addDevice(location, "WRN Methylation",type="bp",columns=c("mutantmean","IBmean"))
+mutantMean<-rowMeans(getBeta(qgmset[,mutant]))
+IBMean<-rowMeans(getBeta(qgmset[,IB]))
+mat<-cbind(mutantMean,IBMean)
+range<-getLocations(qgmset)
+tem<-SummarizedExperiment(rowData=range,assays=SimpleList(counts=mat))
+mgr$addDevice(tem,'Scatter Plot')
+
+```
