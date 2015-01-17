@@ -100,7 +100,8 @@ block=blockFinder(shortcpg,design=design,what='Beta',cutoff=0.0001,smooth=FALSE)
 ```
 
 #Diagnostic Plots(Plot the genes)
-```{r}pheno=c('Mutant','Mutant','IB','IB','IB'),t
+```{r}
+pheno=c('Mutant','Mutant','IB','IB','IB')
 cpgs <- rownames(dmp)[1]
 plotCpg(getM(qgmset[,c(mutant,IB)]), cpg=cpgs, pheno=c('Mutant','Mutant','IB','IB','IB'),measure='M')
 ```
