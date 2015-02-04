@@ -7,8 +7,7 @@ The aim of this workflow is written for those who want to analyze 450k Methylati
 The topic of this data is two premature aging diseases, Hutchinson-Gilford Progeria syndrome (HGP; OMIM:176670) and Werner Syndrome (WS; OMIM:277700). The disease could relate to mutations in lamin A (LMNA) gene and Werner syndrome RecQ helicase like (WRN) genes. In addition, sometimes the diseases do not relate with genetic aberrations.
 
 In order to explore whether epigenetic abberrations are associated with the diseases, the authors of the paper perform a series of experiment on Infinium HumanMethylation450 BeadChip with different kinds of cells. 
-This is a summary of the cells type.
-![alt text](discription.png)	
+There is a summary of the cells type in the paper.
 For WS, it contains LMNA mutant samples(AG19911), WRN mutant samples(AG07896,AG11385), non-mutant disease samples(AG03364). For HGP, it contains three non-mutant samples. In addition, these 3 samples comes from the same family, one father (AG15693), and two daughters (AG15694,AG15695).
 
 However, all these samples are Epstein-Barr virus (EBV) immortalized B-cells (lymphoblastoid cell lines; LCLs). The auther add some immortalized B-cells samples(LCL5, LCL6, LCL7) and some naive B-cells samples(Bcell01,Bcell02,Bcell03) for comparison. Besides, they also add some peripheral blood mononuclear cells samples(PMBC11, PMBC12, PMBC14).
