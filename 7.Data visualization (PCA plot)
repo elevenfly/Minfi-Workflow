@@ -1,2 +1,0 @@
-library(DESeq2)
-plotPCA(mset,intgroup=c('title'))
