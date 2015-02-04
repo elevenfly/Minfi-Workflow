@@ -1,7 +1,0 @@
-cpgIslands<-getLocations(mset[1:5,]) # To get the range information
-chr <- as.character(unique(seqnames(cpgIslands)))
-gen <- genome(cpgIslands)
-atrack <- AnnotationTrack(cpgIslands, name = "CpG")            
-gtrack <- GenomeAxisTrack()
-itrack <- IdeogramTrack(genome = gen, chromosome = chr)                        
-plotTracks(list(itrack, gtrack, atrack))
