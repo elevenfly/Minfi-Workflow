@@ -1,0 +1,352 @@
+Minfi Workflow --- Show with a Real Example
+==============================
+#The Aim of This Workflow
+The aim of this workflow is written for those who want to analyze 450k Methylation Array data from GEO but do not know how to do it. We will try to show how to design analysis and how to implement this analysis with R. The dataset we use here is [GSE42865](http://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE42865). Its paper's PMID is [23257959](http://www.ncbi.nlm.nih.gov/pubmed/23257959)
+
+#Data Description
+The topic of this data is two premature aging diseases, Hutchinson-Gilford Progeria syndrome (HGP; OMIM:176670) and Werner Syndrome (WS; OMIM:277700). The disease could relate to mutations in lamin A (LMNA) gene and Werner syndrome RecQ helicase like (WRN) genes. In addition, sometimes the diseases do not relate with genetic aberrations.
+
+In order to explore whether epigenetic abberrations are associated with the diseases, the authors of the paper perform a series of experiment on Infinium HumanMethylation450 BeadChip with different kinds of cells. 
+There is a summary of the cells type in the paper.
+For WS, it contains LMNA mutant samples(AG19911), WRN mutant samples(AG07896,AG11385), non-mutant disease samples(AG03364). For HGP, it contains three non-mutant samples. In addition, these 3 samples comes from the same family, one father (AG15693), and two daughters (AG15694,AG15695).
+
+However, all these samples are Epstein-Barr virus (EBV) immortalized B-cells (lymphoblastoid cell lines; LCLs). The auther add some immortalized B-cells samples(LCL5, LCL6, LCL7) and some naive B-cells samples(Bcell01,Bcell02,Bcell03) for comparison. Besides, they also add some peripheral blood mononuclear cells samples(PMBC11, PMBC12, PMBC14).
+
+#Analysis Design
+We will have many ways to analysis the data. Here, I will focus on what are the epigenetic difference between WRN-mutant WS disease samples and healthy samples (the differences between AG07896, AG11385 and LCL5, LCL6, LCL7) in detail. After that, I will explore the different between HGP samples (AG15694,AG15695,AG15693) and healthy samples (LCL5, LCL6, LCL7).
+
+#Getting Start
+To analysis 450k array data, we need to import minfi package in R.
+```{r}
+library(minfi)
+```
+
+In GEO, there are two types of methylation data. One is processed data. The other is signal intensities data (raw data). Our analysis will based on raw data.
+#Read Processed Data
+```{r}
+mset<-getGenomicRatioSetFromGEO('GSE42865')
+class(mset)
+```
+This is a GenomicRatioSet.
+```{r}
+pData(mset)
+```
+We can see that processed data contains phenotypic data.
+#Read signal intensities data
+To read signal intensities data, we need to download data from GEO and then know where it is stored.
+```{r}
+library(GEOquery)
+path <- getGEOSuppFiles('GSE42865')
+print(path)
+```
+This file is zip file now, we need to unzip it and then read.
+```{r}
+filepath <- row.names(path)[2]
+unzipped_filepath <- gsub("[.]gz$", "", filepath)
+gunzip(filepath,destname=unzipped_filepath)
+gmset=readGEORawFile(unzipped_filepath,Uname="Signal_A",Mname="Signal_B",sep="\t")
+class(gmset)
+```
+This is a GenomicMethylSet.
+```{r}
+pData(gmset)
+```
+We can find that intensities signal data does not contain phenotypic data. So, we need to merge `pData` from processed data into raw intensity data
+```{r}
+pd <- pData(mset)
+m <- match(rownames(pData(gmset)), rownames(pd))
+pData(gmset) <- pd[m,]
+pData(gmset)
+```
+
+#Form comparison groups
+First, we can assign those WS samples with WRN mutant into one group (we call it `WRN`) and assign healthy immortalized samples into another (we call it `LCL`)
+```{r}
+WRN<-c('AG07896','AG11385')
+LCL<-c('LCL5','LCL6','LCL7')
+```
+
+#MAplot
+Now, we would like to see the quality of our data. We will draw a MA plot.  Because there are many invalid data, we needs to exclude them first.
+```{r}
+library(affy)
+rowMeans(log2(getBeta(gmset[,c(WRN,LCL)])))->A
+M<-log2(rowMeans(getBeta(gmset[,WRN]))/rowMeans(getBeta(gmset[,LCL])))
+intersect(which(M!='NaN'),which(A!='NaN'))->filter
+intersect(filter,which(M!='Inf'))->filter
+intersect(filter,which(M!='-Inf'))->filter
+intersect(filter,which(A!='-Inf'))->filter
+intersect(filter,which(A!='Inf'))->filter
+ma.plot(A[filter],M[filter],cex=1)
+```
+
+We can find that the quality of data is not so good as some M value is not 0. So, we need some preprocess.
+
+#Preprocess
+We can check what kind of preprocess method is applied for the data by `preprocessMethod()`. 
+```
+preprocessMethod(mset)
+preprocessMethod(gmset)
+```
+There is no further preprocess method suitable for preprocessed data. But for raw data, stratified quantile normalization can be applied with `preprocessQuantile()`.
+```{r}
+qgmset=preprocessQuantile(gmset)
+class(qgmset)
+```
+
+
+#MAplot
+Now, we will plot MA plot again.
+```{r}
+library(affy)
+rowMeans(log2(getBeta(qgmset[,c(WRN,LCL)])))->A
+M<-log2(rowMeans(getBeta(qgmset[,WRN]))/rowMeans(getBeta(qgmset[,LCL])))
+intersect(which(M!='NaN'),which(A!='NaN'))->filter
+intersect(filter,which(M!='Inf'))->filter
+intersect(filter,which(M!='-Inf'))->filter
+intersect(filter,which(A!='-Inf'))->filter
+intersect(filter,which(A!='Inf'))->filter
+ma.plot(A[filter],M[filter],cex=1)
+```
+
+We can find that M value is more close to 0. So, the quality of the data has been improved.
+
+Here, we start to analysis the differences between WRN mutant WS samples(AG07896,AG11385) and healthy immortalized samples(LCL5, LCL6, LCL7).
+
+In the beginning, we may want to have a look at our data. What samples are similar with each other? What samples are different with each other? Here we provide two ways to show the distance between samples.
+
+
+#Multi-dimension scaling plots
+```{r}
+mdsPlot(getM(qgmset[,c(WRN,LCL)]),numPositions=1000,sampGroups=c(rep('WRN',2),rep('LCL',3)),sampNames=colnames(qgmset[,c(WRN,LCL)]))
+```
+
+First, we would like to explain this code. The argument `sampGroups` will describe how the comparison is. Because in the WRN groups, we have 2 samples, in the LCL group, we have 3 samples, we assign this argument as `c(rep('WRN',2),rep('LCL',3))` to descirbe.
+
+Second, the graph shows that three LCL sample are really similar. However, two WRN mutant WS disease samples are relatively different between each other.
+
+#Sample Distance
+Here is another way to show the distance between samples by heatmap.
+```{r}
+sampleDists<-dist(t(getBeta(qgmset[,c(WRN,LCL)])))  
+library(gplots)
+library('RColorBrewer')
+sampleDistMatrix<-as.matrix(sampleDists)
+colors<-colorRampPalette(rev(brewer.pal(9,'Blues')))(255)
+hc<-hclust(sampleDists)
+heatmap.2(sampleDistMatrix,Rowv=as.dendrogram(hc),symm=TRUE,trace='none',col=colors,margins=c(2,10),labCol=FALSE)
+```
+
+From this plot, we can draw the same conclusion: three LCL samples are relatively similar, two WRN mutant WS disease samples are quite different.
+
+
+#Histogram
+If we want to have an overview of how our data distributes, we can plot a histogram.
+```{r}
+betaratio<-rowMeans(getBeta(qgmset[,WRN]))/rowMeans(getBeta(qgmset[,LCL]))
+```
+
+Now, betaration can show the the ratio between WRN and LCL.
+```{r}
+hist(betaratio,col="grey50", border="white",main='Histogram of BetaRatio',xlab='BetaRatio')
+```
+
+For more information, we can set a range.
+```{r}
+hist(betaratio[which(betaratio<1)],col="grey50", border="white",main='Histogram of BetaRatio',xlab='BetaRatio')
+hist(betaratio[which(betaratio>7)],col="grey50", border="white",main='Histogram of BetaRatio',xlab='BetaRatio')
+hist(betaratio[intersect(which(betaratio>=1),which(betaratio<=7))],col="grey50", border="white",xlab='BetaRatio',main='Histogram of BetaRatio')
+```
+
+We can see that most value concentrates on 1. With the increase or decrease of the value, the frequency will decrease. 
+
+#Differentially Methylated Position
+Sometimes we may need to know how different the methylation data of the positions is. We can use `dmpFinder()`.
+```{r}
+dmp<-dmpFinder(getM(qgmset[,c(WRN,LCL)]),pheno=c('WRN','WRN','LCL','LCL','LCL'),type='categorical')
+```
+
+We can have a look at the result.
+```{r}
+head(dmp)
+```
+
+It is sorted by differential methylation p-value.
+We can still have a look at the methylation value of the most differentially expressed position.
+```{r}
+getM(qgmset[rownames(dmp[1])[1],c(WRN,LCL)])
+```
+
+#Plot CpG
+Here we provide a better way to show the methylation value of each position.
+```{r}                   
+cpgs <- rownames(dmp)[1:4]
+par(mfrow=c(2,2))
+plotCpg(getM(qgmset[,c(WRN,LCL)]), cpg=cpgs, pheno=c('WRN','WRN','LCL','LCL','LCL'),measure='M',ylab='M')
+```
+
+#Gene Clustering
+After we have the most differential positions, we can plot the heatmap for them.
+```{r}
+library(RColorBrewer)
+library("genefilter")
+library(gplots)
+sidecols<-c('grey','grey','dodgerblue','dodgerblue','dodgerblue')
+```
+
+Here, we will select 30 positions.
+```{r}
+topVarGenes <-head(rownames(dmp),30)
+colors<-colorRampPalette(rev(brewer.pal(9,'PuOr')))(255)
+mat<-getBeta(qgmset)[topVarGenes,c(WRN,LCL)]
+mat<-mat-rowMeans(mat)
+heatmap.2(mat,trace='none',col=colors,ColSideColors=sidecols,labRow=FALSE,mar=c(10,2),scale='row')
+```
+
+From this heatmap, we can find that for all of these positions, they are quite different between WRNgroup and LCL group. What's more, for some of them, there are differences inside group.
+
+#Find the Block
+Sometimes we may need to find large scale region of methylation differences. We can use `blockFinder()` function.
+
+First, we need to create a GenomicRatioSet.
+```{r}
+shortcpg<-cpgCollapse(qgmset[,c(WRN,LCL)],what='Beta',returnBlockInfo=FALSE)
+```
+
+Then, we need to create the design matrix.
+```{r}
+design=matrix(c(1,0,1,0,0,1,0,1,0,1),nrow=5,ncol=2,byrow=TRUE)
+rownames(design)=c(WRN,LCL)
+colnames(design)=c('Mutant','LCL')
+design
+block=blockFinder(shortcpg,design=design,what='Beta',cutoff=0.0001,smooth=FALSE)
+```
+
+After that, we can plot this block in genomic space in two ways.
+
+#Plotting in genomic space by Gviz
+```{r}
+library(Gviz)
+cpgIslands<-getLocations(qgmset[1:5,]) 
+```
+
+This step is to select the methylation positions we want to plot.
+```{r}
+chr <- as.character(unique(seqnames(cpgIslands)))
+gen <- genome(cpgIslands)
+atrack <- AnnotationTrack(cpgIslands, name = "CpG")            
+gtrack <- GenomeAxisTrack()
+itrack <- IdeogramTrack(genome = gen, chromosome = chr)                     
+plotTracks(list(itrack, gtrack, atrack))
+```
+
+#Plotting in genomic space by Epiviz
+We will find that by the last method, we need to tell R which position we want to plot. However, by Epiviz, we can select which chromosome and what positions to plot on website.
+```{r}
+library(epivizr)
+mgr=startEpiviz(workspace="qyOTB6vVnff")
+```
+We will plot the blocks' positions in genome first.
+```{r}
+grblock<-GRanges(seqnames=block$table$chr,ranges=IRanges(block$table$start,block$table$end),strand=c('*'))
+blocks_dev <- mgr$addDevice(grblock, "450k WRN_mutant_blocks")
+```
+
+And then, we will plot the mean beta value of WRN group and LCL group. 
+```{r}
+getLocations(qgmset)->location
+location$WRNmean<-rowMeans(getBeta(qgmset[,WRN]))
+location$LCLmean<-rowMeans(getBeta(qgmset[,LCL]))
+means_dev <- mgr$addDevice(location, "WRN Methylation",type="bp",columns=c("WRNmean","LCLmean"))
+```
+With this plot, we can see how different the beta value of each position along the genome is.
+
+Next, we will plot the scatter plot.
+```{r}
+WRNMean<-rowMeans(getBeta(qgmset[,WRN]))
+LCLMean<-rowMeans(getBeta(qgmset[,LCL]))
+mat<-cbind(WRNMean,LCLMean)
+range<-getLocations(qgmset)
+tem<-SummarizedExperiment(rowData=range,assays=SimpleList(counts=mat))
+mgr$addDevice(tem,'Scatter Plot')
+```
+From this plot, we can find out, in this region, which position is the most differnt between two groups. We can find that points are not concentrate along the diagonal. It shows that WRN mutant will affact methlylation.
+
+# More exploration
+Based on these fundmental codes, we can have make more analysis.Now, I will show the difference between LCL samples and HGP samples. 
+
+First, we will form the comparison groups.
+```{r}
+HGP<-c('AG15694','AG15695','AG15693')
+LCL<-c('LCL5','LCL6','LCL7')
+```
+Then, we will have a look at the distance between samples.
+```{r}
+mdsPlot(getM(qgmset[,c(HGP,LCL)]),numPositions=1000,sampGroups=c(rep('HGP',3),rep('LCL',3)),sampNames=colnames(qgmset[,c(HGP,LCL)]))
+sampleDists<-dist(t(getBeta(qgmset[,c(HGP,LCL)])))
+sampleDistMatrix<-as.matrix(sampleDists)
+hc<-hclust(sampleDists)
+heatmap.2(sampleDistMatrix,Rowv=as.dendrogram(hc),symm=TRUE,trace='none',col=colors,margins=c(2,10),labCol=FALSE)
+```
+We can find that, the distance information from two methods are different. It could be due to the difference of methods. Another reason could be that MDS just includes 1000 positions with the most methylation variability.
+
+There is a more interesting thing. Comparing with WRN vs LCL, there are less differences between HGP and LCL because we can find that LCL7 sample are more similar to HGP samples than other two LCL samples.
+
+Then, we may want to have a overview at how different it is between HGP group and LCL group.
+```{r}
+betaratio<-rowMeans(getBeta(qgmset[,HGP]))/rowMeans(getBeta(qgmset[,LCL]))
+hist(betaratio,col="grey50", border="white",main='Histogram of BetaRatio',xlab='BetaRatio')
+hist(betaratio[which(betaratio<1)],col="grey50", border="white",main='Histogram of BetaRatio',xlab='BetaRatio')
+hist(betaratio[which(betaratio>7)],col="grey50", border="white",main='Histogram of BetaRatio',xlab='BetaRatio')
+hist(betaratio[intersect(which(betaratio>=1),which(betaratio<=7))],col="grey50", border="white",main='Histogram of BetaRatio',xlab='BetaRatio')
+```
+We can find that they are almost the same with the comparison between WRN mutant group and LCL group.
+
+Next we may want to have a look at differential positions.
+```{r}
+dmp<-dmpFinder(getM(qgmset[,c(HGP,LCL)]),pheno=c(rep('HGP',3),rep('LCL',3)),type='categorical')
+head(dmp)
+```
+
+We will draw a heatmap for the top 50 positions.
+```{r}
+sidecols<-c('grey','grey','grey','dodgerblue','dodgerblue','dodgerblue')
+topVarGenes <-head(rownames(dmp),50)
+colors<-colorRampPalette(rev(brewer.pal(9,'PuOr')))(255)
+mat<-getBeta(qgmset)[topVarGenes,c(HGP,LCL)]
+mat<-mat-rowMeans(mat)
+heatmap.2(mat,trace='none',col=colors,ColSideColors=sidecols,labRow=FALSE,mar=c(10,2),scale='row')
+```
+
+We can see that all the positions' value is very different between two groups.
+
+Next, we may want to show block data and the beta value of each position as well as their beta value in a genomic space.
+```{r}
+shortcpg<-cpgCollapse(qgmset[,c(HGP,LCL)],what='Beta',returnBlockInfo=FALSE)
+design=matrix(c(1,0,1,0,1,0,0,1,0,1,0,1),nrow=6,ncol=2,byrow=TRUE)
+rownames(design)=c(HGP,LCL)
+colnames(design)=c('HGP','LCL')
+design
+block=blockFinder(shortcpg,design=design,what='Beta',cutoff=0.0001,smooth=FALSE)
+mgr$stopServer()
+mgr=startEpiviz(workspace="qyOTB6vVnff")
+grblock<-GRanges(seqnames=block$table$chr,ranges=IRanges(block$table$start,block$table$end),strand=c('*'))
+blocks_dev <- mgr$addDevice(grblock, "450k HGP_blocks")
+getLocations(qgmset)->location
+location$HGPmean<-rowMeans(getBeta(qgmset[,HGP]))
+location$LCLmean<-rowMeans(getBeta(qgmset[,LCL]))
+means_dev <- mgr$addDevice(location, "HGP Methylation",type="bp",columns=c("HGPmean","LCLmean"))
+HGPMean<-rowMeans(getBeta(qgmset[,HGP]))
+LCLMean<-rowMeans(getBeta(qgmset[,LCL]))
+mat<-cbind(HGPMean,LCLMean)
+range<-getLocations(qgmset)
+tem<-SummarizedExperiment(rowData=range,assays=SimpleList(counts=mat))
+mgr$addDevice(tem,'Scatter Plot')
+```
+
+If we compare the two scatter plot we draw, we can find that the points from latter one are more concentrating along the diagonal than points from the former one. It shows that there are less differnce between HGP and LCL then the difference between WRN and LCL. This conclusion is the same with the conclusion which we draw from the heatmap of distance. Maybe it shows that differences in methylation is less important in HGP vs LCL than WRN vs LCL.
+
+```{r}
+mgr$stopServer()
+sessionInfo()
+```
